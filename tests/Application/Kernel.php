@@ -85,7 +85,7 @@ final class Kernel extends BaseKernel
 
     protected function getContainerBaseClass(): string
     {
-        if ($this->isTestEnvironment()) {
+        if ($this->isTestEnvironment() && class_exists(MockerContainer::class)) {
             return MockerContainer::class;
         }
 
@@ -97,7 +97,7 @@ final class Kernel extends BaseKernel
         /* @var ContainerBuilder $container */
         Assert::isInstanceOf($container, ContainerBuilder::class);
 
-        $locator = new FileLocator($this, $this->getRootDir().'/Resources');
+        $locator = new FileLocator($this, $this->getProjectDir().'/src/Resources');
         $resolver = new LoaderResolver([
             new XmlFileLoader($container, $locator),
             new YamlFileLoader($container, $locator),
