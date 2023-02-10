@@ -20,7 +20,10 @@ use Doctrine\ORM\EntityManagerInterface;
 use Sylius\Bundle\ResourceBundle\Event\ResourceControllerEvent;
 use Sylius\Component\Order\Model\OrderInterface;
 use Sylius\Component\Resource\Exception\RaceConditionException;
+use Symfony\Component\Lock\LockFactory;
 use Symfony\Component\Lock\LockInterface;
+use Symfony\Component\Lock\Store\FlockStore;
+use Symfony\Component\Lock\Store\SemaphoreStore;
 
 /**
  * Prevents concurrent insertion of collection times.
@@ -31,16 +34,29 @@ final class ShipmentCollectionTimeLockListener
 {
     private EntityManagerInterface $entityManager;
     private CollectionTimeRepositoryInterface $collectionTimeRepository;
-    private LockInterface $lock;
+    private ?LockInterface $lock= null;
     private string $shipmentClass;
 
-    public function __construct(EntityManagerInterface $entityManager, LockInterface $lock, CollectionTimeRepositoryInterface $collectionTimeRepository)
+    public function __construct(
+        EntityManagerInterface $entityManager,
+        CollectionTimeRepositoryInterface $collectionTimeRepository
+    )
     {
         $this->entityManager = $entityManager;
         $this->collectionTimeRepository = $collectionTimeRepository;
-        $this->lock = $lock;
     }
 
+    protected function getLock() : LockInterface {
+        if(!$this->lock instanceof LockInterface) {
+            if (SemaphoreStore::isSupported()) {
+                $store = new SemaphoreStore();
+            } else {
+                $store = new FlockStore();
+            }
+            $this->lock = (new LockFactory($store))->createLock(ShipmentCollectionTimeLockListener::class);;
+        }
+        return $this->lock;
+    }
     /**
      * @throws RaceConditionException
      */
@@ -52,14 +68,14 @@ final class ShipmentCollectionTimeLockListener
 
         $unitOfWork = $this->entityManager->getUnitOfWork();
 
-        $this->lock->acquire(true);
+        $this->getLock()->acquire(true);
         foreach ($shipments as $shipment) {
             if ($shipment->isClickNCollect()) {
                 $previousCollectionTime = $unitOfWork->getOriginalEntityData($shipment)['collectionTime'] ?? null;
                 $newCollectionTime = $shipment->getCollectionTime();
 
                 if ($previousCollectionTime !== $newCollectionTime && $this->collectionTimeRepository->isSlotFull($shipment->getLocation(), $shipment->getCollectionTime())) {
-                    $this->lock->release();
+                    $this->getLock()->release();
                     throw new RaceConditionException();
                 }
             }
@@ -68,8 +84,8 @@ final class ShipmentCollectionTimeLockListener
 
     public function onPostSelectShipping(): void
     {
-        if ($this->lock->isAcquired()) {
-            $this->lock->release();
+        if ($this->getLock()->isAcquired()) {
+            $this->getLock()->release();
         }
     }
 

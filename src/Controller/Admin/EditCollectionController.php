@@ -19,6 +19,7 @@ use Sylius\Bundle\CoreBundle\Form\Type\Checkout\SelectShippingType;
 use Symfony\Component\Form\FormFactoryInterface;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\Session\SessionInterface;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -37,17 +38,17 @@ final class EditCollectionController
     private FormFactoryInterface $formFactory;
     private ObjectManager $orderManager;
     private RouterInterface $router;
-    private SessionInterface $session;
+    private ?SessionInterface $session = null;
     private TranslatorInterface $translator;
     private Environment $twig;
 
-    public function __construct(ObjectRepository $orderRepository, FormFactoryInterface $formFactory, ObjectManager $orderManager, RouterInterface $router, SessionInterface $session, TranslatorInterface $translator, Environment $twig)
+    public function __construct(ObjectRepository $orderRepository, FormFactoryInterface $formFactory, ObjectManager $orderManager, RouterInterface $router, RequestStack $requestStack, TranslatorInterface $translator, Environment $twig)
     {
         $this->orderRepository = $orderRepository;
         $this->formFactory = $formFactory;
         $this->orderManager = $orderManager;
         $this->router = $router;
-        $this->session = $session;
+        $this->session = $requestStack->getMainRequest()?->getSession();
         $this->translator = $translator;
         $this->twig = $twig;
     }
